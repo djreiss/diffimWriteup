@@ -16,6 +16,8 @@ In [Figure 1](#figure-1) and [Figure 2](#figure-2), we show an image subtraction
 
 An un-published modification to the AL algorithm was implemented, which accounts for the occasions when the width of the PSF of the science image is $\leq$ the width of the PSF of the template image. In this case, AL cannot convolve the template to match that of the science image; it instead would need to deconvolve the template, which would result in ringing artifacts. Instead, the science image is "pre-convolved," or "pre-filtered" with its own PSF, or a Gaussian approximation of it. If the template PSF is narrower than $\sqrt{2}\times$ that of the science image, then AL will now work, but the resulting image subtraction will have been pre-filtered by the science image's PSF. This image then corresponds to the match-filtered "likelihood" image subtraction, which has already been convolved with its own PSF, and thus for detection, just needs to be thresholded. A special case is then needed to do any kind of measurement on detected sources in this image. I am not entirely sure how that works.
 
+**I also just discovered that the pre-filtered image subtraction has an offset which is evident in both the decorrelated and non-decorrelated cases ([Figure 3](#figure-3)). I initially thought this was a bug in the decorrelation part, but it appears to be a bug in the pre-convolution step. This needs to be investigated if pre-convolution is going to be used.**
+
 ## 1.2. AL Decorrelation
 
 When the template exposure has significant noise (i.e., is not constructed from a number of coadds), then AL will correlate the noise among neighboring pixels when it convolves the template with the PSF-matching kernel, $k$. As a result, the noise will be correlated in the image subtraction, leading to inaccurate detection and measurement (see [DMTN-006](https://dmtn-021.lsst.io/) for details). In [DMTN-021](https://dmtn-021.lsst.io/), we describe a method for "decorrelating" the AL image subtraction, and this has been implemented in the LSST image subtraction code, in the module `lsst.ip.diffim.imageDecorrelation`. Decorrelation is toggled via the `doDecorrelation` config option, which is enabled by default. Below in [Figure 2](#figure-2) we show a subsection of the images from [Figure 1](#figure-1), including both the regular (non-decorrelated) and the default (decorrelated) AL subtractions on the bottom.
@@ -24,15 +26,19 @@ When the template exposure has significant noise (i.e., is not constructed from 
 
 See section (1.2.1) below for details and complications of implementing decorrelation in the case of pre-convolution (section 1.1), and see section (3) below for details about how the decorrelation is performed, when accounting for spatially-varying PSFs and noise.
 
-### 1.2.1. Decorrelation + pre-convolution: aliasing issues
+### 1.2.1. Decorrelation + pre-convolution = trouble
 
 The variant of the expression for performing decorrelation in the case of pre-convolution (described above) is given by the deconvolution kernel, $\psi(k)$ as described in [Equation 3 in DMTN-021](https://dmtn-021.lsst.io/#equation-equation-3). The expression includes the pre-filter kernel, $M(k)$ described above.
 
-This modified decorrelation kernel has been implemented in `ip_diffim`, and is used automatically in `imageDifference.py` when both the `doDecorrelation` and the `doPreConvolution` config options are enabled. However, in many cases the decorrelation kernel is unstable due to the inclusion of the PSF in the denominator. This leads strange ringing-type artifacts in the resulting decorrelated likelihood image subtraction. (But see below about Zogy and how these ringing artifacts may be a result of how the PSFs are measured, rather than a result of issues with the algorithm itself.)
-
-In [Figure 3](#figure-3), we show the same DECam image subsection as in [Figure 2](#figure-2), but in which the template and science image were swapped and pre-convolution is turned on. The bottom two sub-images show the resulting match-filtered subtractions, with and without decorrelation enabled.
+This modified decorrelation kernel has been implemented in `ip_diffim`, and is used automatically in `imageDifference.py` when both the `doDecorrelation` and the `doPreConvolution` config options are enabled. In [Figure 3](#figure-3), we show the same DECam image subsection as in [Figure 2](#figure-2), but in which the template and science image were swapped and pre-convolution is turned on. The bottom two sub-images show the resulting match-filtered subtractions, with and without decorrelation enabled. However, in many cases the decorrelation kernel is unstable due to the inclusion of the PSF in the denominator. This leads to strange aliasing-type artifacts in the resulting decorrelated likelihood image subtraction, which are extremely large and globally affect the pixel statistics of the decorrelated, pre-filtered image subtraction. This may be seen in [Figure 4](#figure-4). (But see below about Zogy and how these ringing artifacts may be a result of how the PSFs are measured, rather than a result of issues with the algorithm itself.)
 
 ![Subsections of a pre-convolved DECam image subtraction, including warped and PSF-matched template, science image, and both decorrelated and non-decorrelated mmatch-filtered AL difference images.](_static/fig03.png "figure-3")
+
+![Histograms of the sections shown in Figure 4 for the pre-conv (not decorrelated) image subtractions (left) and the decorrelated version.](_static/fig04a.png "figure-4")
+
+![](_static/fig04b.png)
+
+It should also be noted that currently the spatially-varying decorrelation (see below) is functional in the case when pre-convolution is also enabled. However, the resulting images show even worse aliasing than the case where a static (non-spatially-varying) decorrelation kernel is used. You have been warned.
 
 # 2. Zackay, et al. (2016) (ZOGY) image subtraction
 
@@ -52,7 +58,8 @@ In [Figure 3](#figure-3), we show the same DECam image subsection as in [Figure 
 
 
 ------
-1. decorrelation + preconvolution not working
+0. preconvolution has an x-offset in the resulting diffim (regardless of decorrelation or not)
+1. decorrelation + preconvolution aliasing issues
 2. zogy artifacts
 3. imageMapReduce gridding could be optimized, right now makes the map-reduce part slow.
 4. use of coaddPsf not ideal -- detection is fast but measurement is SLOW
