@@ -148,7 +148,7 @@ This will not work for Zogy, however, since the template and science image are e
 
 ## 5.1. Commands for running image subtraction in various modes
 
-Example output from the various runs of the image subtraction pipeline on a single pair of DECam exposures is shown in the [notebook attached to this DMTN's repository](_notebooks/figures-and-debugging.ipynb]. Scripts were used to perform these runs, and they have been saved in the [DM-3704 branch of ip_diffim](https://github.com/lsst/ip_diffim/tree/u/djreiss/DM-3704) and of [pipe_tasks](https://github.com/lsst/pipe_tasks/tree/u/djreiss/DM-3704). I now summarize these command-line configurations below:
+Example output from the various runs of the image subtraction pipeline on a single pair of DECam exposures is shown in the [notebook attached to this DMTN's repository](_notebooks/figures-and-debugging.ipynb]. Scripts were used to perform these runs, and they have been saved in the [DM-3704 branch of ip_diffim](https://github.com/lsst/ip_diffim/tree/u/djreiss/DM-3704) and of [pipe_tasks](https://github.com/lsst/pipe_tasks/tree/u/djreiss/DM-3704). I now summarize these command-line configurations below. I also include the redirected output text files in this repo as well.
 
 1. Configuration file `diffimConfig.py` for `imageDifference.py`:
 ```
@@ -187,7 +187,8 @@ imageDifference.py calexpDir_b1631 --output decamDirTest_ALDec_yesSpatial \
 ```
 imageDifference.py calexpDir_b1631 --output decamDirTest_Zogy_noSpatial \
           --id visit=289820 ccdnum=11 --templateId visit=288976 \
-          --configfile diffimConfig.py --config makeDiffim.subtract='zogy' >& \ 				output_Zogy_noSpatial.txt
+          --configfile diffimConfig.py --config makeDiffim.subtract='zogy' >& \ 
+				output_Zogy_noSpatial.txt
 ```
 
 ```
@@ -230,21 +231,35 @@ config.getTemplate.retarget(GetCalexpAsTemplateTask)
 And below are the commands used (prior to each run, `rm -r DELETEME` was performed):
 
 ```
-time makeDiffim.py calexpDir_b1631 --output DELETEME --id visit=289820 ccdnum=11 --templateId visit=288976 --configfile makeDiffimConfig.py --config doDecorrelation=False
+time makeDiffim.py calexpDir_b1631 --output DELETEME --id visit=289820 ccdnum=11 \
+	--templateId visit=288976 --configfile makeDiffimConfig.py \
+	--config doDecorrelation=False
 
-time makeDiffim.py calexpDir_b1631 --output DELETEME --id visit=289820 ccdnum=11 --templateId visit=288976 --configfile makeDiffimConfig.py --config doDecorrelation=True
+time makeDiffim.py calexpDir_b1631 --output DELETEME --id visit=289820 ccdnum=11 \
+	--templateId visit=288976 --configfile makeDiffimConfig.py \
+	--config doDecorrelation=True
 
-time makeDiffim.py calexpDir_b1631 --output DELETEME --id visit=289820 ccdnum=11 --templateId visit=288976 --configfile makeDiffimConfig.py --config doDecorrelation=True --config doSpatiallyVarying=True
+time makeDiffim.py calexpDir_b1631 --output DELETEME --id visit=289820 ccdnum=11 \
+	--templateId visit=288976 --configfile makeDiffimConfig.py \
+	--config doDecorrelation=True --config doSpatiallyVarying=True
 
-time makeDiffim.py calexpDir_b1631 --output DELETEME --id visit=289820 ccdnum=11 --templateId visit=288976 --configfile makeDiffimConfig.py --config subtract=zogy
+time makeDiffim.py calexpDir_b1631 --output DELETEME --id visit=289820 ccdnum=11 \
+	--templateId visit=288976 --configfile makeDiffimConfig.py --config subtract=zogy
 
-time makeDiffim.py calexpDir_b1631 --output DELETEME --id visit=289820 ccdnum=11 --templateId visit=288976 --configfile makeDiffimConfig.py --config subtract=zogy --config doSpatiallyVarying=True
+time makeDiffim.py calexpDir_b1631 --output DELETEME --id visit=289820 ccdnum=11 \
+	--templateId visit=288976 --configfile makeDiffimConfig.py --config subtract=zogy \
+	--config doSpatiallyVarying=True
 
 rpl -q 'inImageSpace=False' 'inImageSpace=True' makeDiffimConfig.py
-time makeDiffim.py calexpDir_b1631 --output DELETEME --id visit=289820 ccdnum=11 --templateId visit=288976 --configfile makeDiffimConfig.py --config subtract=zogy
+time makeDiffim.py calexpDir_b1631 --output DELETEME --id visit=289820 ccdnum=11 \
+	--templateId visit=288976 --configfile makeDiffimConfig.py --config subtract=zogy
 rpl -q 'inImageSpace=True' 'inImageSpace=False' makeDiffimConfig.py
 
-time makeDiffim.py calexpDir_b1631 --output DELETEME --id visit=288976 ccdnum=11 --templateId visit=289820 --configfile makeDiffimConfig.py --config doDecorrelation=False --config doPreConvolve=True
+time makeDiffim.py calexpDir_b1631 --output DELETEME --id visit=288976 ccdnum=11 \
+	--templateId visit=289820 --configfile makeDiffimConfig.py \
+	--config doDecorrelation=False --config doPreConvolve=True
 
-time makeDiffim.py calexpDir_b1631 --output DELETEME --id visit=288976 ccdnum=11 --templateId visit=289820 --configfile makeDiffimConfig.py --config doDecorrelation=True --config doPreConvolve=True
+time makeDiffim.py calexpDir_b1631 --output DELETEME --id visit=288976 ccdnum=11 \
+	--templateId visit=289820 --configfile makeDiffimConfig.py \
+	--config doDecorrelation=True --config doPreConvolve=True
 ```
