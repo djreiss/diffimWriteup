@@ -148,7 +148,7 @@ This will not work for Zogy, however, since the template and science image are e
 
 ## 5.1. Commands for running image subtraction in various modes
 
-Example output from the various runs of the image subtraction pipeline on a single pair of DECam exposures is shown in the [notebook attached to this DMTN's repository](_notebooks/figures-and-debugging.ipynb]. Scripts were used to perform these runs, and they have been saved in the [DM-3704 branch of ip_diffim](https://github.com/lsst/ip_diffim/tree/u/djreiss/DM-3704) and of [pipe_tasks](https://github.com/lsst/pipe_tasks/tree/u/djreiss/DM-3704). I now summarize these command-line configurations below. I also include the redirected output text files in this repo as well.
+Example output from the various runs of the image subtraction pipeline on a single pair of DECam exposures is shown in the [notebook](_data/figures-and-debugging.ipynb) attached to this DMTN's repository. Scripts were used to perform these runs, and they have been saved in the [DM-3704 branch of ip_diffim](https://github.com/lsst/ip_diffim/tree/u/djreiss/DM-3704) and of [pipe_tasks](https://github.com/lsst/pipe_tasks/tree/u/djreiss/DM-3704). I now summarize these command-line configurations below. I also include the redirected output text files in this repo as well.
 
 1. Configuration file `diffimConfig.py` for `imageDifference.py`:
 ```
