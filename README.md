@@ -189,13 +189,13 @@ At the end of each subsection above, I listed the run-time timings of each algor
 | Zogy   | No | Yes | 32.7 |
 | Zogy   | Yes | Yes | 78.7 |
 
-## 5.1. Random thoughts and notes gathered during research
+## 5.3. Random thoughts and notes gathered during research
 
 1. Currently the Zogy implementation uses `numpy.fft.fft2` and related for computing 2-D FFTs. It should be noted that the `scipy.fftpack` implementation has been found to be slightly faster, while the `fftw` library (with python bindings [pyFFTW](https://pypi.python.org/pypi/pyFFTW) can be significantly faster. Moreover, there is little effort made to pad matrices to $2^n$ dimensions, which if done can also speed up the Fourier transforms. Little effort has been made to investigate this further since at this point it is not clear how much the FFTs bottleneck the procedure.
 
 2. The primary bottleneck that appears to be slowing down the AL decorrelation is the convolution of the diffim with the decorrelation kernel. This is currently performed by `afw` code and takes $\sim 10$ seconds for the single DECam exposure. It is not clear if the decorrelation kernel is not properly optimized for this convolution, or what else might be the cause for this slowdown.
 
-## 5.2. Commands for running image subtraction in various modes
+## 5.4. Commands for running image subtraction in various modes
 
 Example output from the various runs of the image subtraction pipeline on a single pair of DECam exposures is shown in the [notebook](_data/figures-and-debugging.ipynb) attached to this DMTN's repository. Scripts were used to perform these runs, and they have been saved in the [DM-3704 branch of ip_diffim](https://github.com/lsst/ip_diffim/tree/u/djreiss/DM-3704) and of [pipe_tasks](https://github.com/lsst/pipe_tasks/tree/u/djreiss/DM-3704). I now summarize these command-line configurations below. I also include the redirected output text files in this repo as well.
 
