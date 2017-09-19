@@ -110,13 +110,13 @@ We also note that the construction of the grid itself is straightforward but may
 
 The spatially varying AL decorrelation is implemented in the `lsst.ip.diffim.imageDecorrelation` submodule via the `DecorrelateALKernelMapper` subclass of `ImageMapper` and the corresponding `DecorrelateALKernelMapReduceConfig` subclass of `ImageMapReduceConfig`. Then the `DecorrelateALKernelSpatialTask` pipe task wraps the construction of the `ImageMapReduceTask` and setting it up to use the `DecorrelateALKernelMapper` as its `mapper`. It is this task (the `DecorrelateALKernelSpatialTask`) is called from the `makeDiffim` task.
 
-**Timing:** The AL with the spatially-varying decorrelation takes 126.3 seconds, or nearly $3\times$ longer than the non-spatially-varying version. The reason for this is due to the fact that (1) many more decorrelation kernels are computed, and (2) more area is convolved (due to overlapping grid elements) with the `imageMapReduced` variant. See the **Known issues** subsection above for more on this.
+**Timing:** The AL with the spatially-varying decorrelation takes 108.0 seconds with the default grid geometry configuration, or $2.4\times$ longer than the non-spatially-varying version. The reason for this is due to the fact that (1) many more decorrelation kernels are computed (276 of them), and (2) more area is convolved ($\sim 6.5\%$ more, due to overlapping grid elements) with the `imageMapReduced` variant. See the **Known issues** subsection above for more on this.
 
 ### 3.1.2. imageMapReduce: Zogy
 
 The spatially varying AL decorrelation is implemented in the `lsst.ip.diffim.imageDecorrelation` submodule via the `ZogyMapper` subclass of `ImageMapper` and the corresponding `ZogyMapReduceConfig` subclass of `ImageMapReduceConfig`. Then the `ZogyImagePsfMatchTask` pipe task wraps the construction of the `ImageMapReduceTask` and setting it up to use the `DecorrelateALKernelMapper` as its `mapper`. It is this task (the `DecorrelateALKernelSpatialTask`) is called from the `makeDiffim` task.
 
-**Timing:** The spatially-varying Zogy implementation takes $\sim 55.3$ seconds, or $\sim 2\times$ longer than the non-spatially-varying version. The reasons for this is unclear, except (as mentioned above) with the spatially-varying variant, the Zogy procedure is actually performed on significantly more image area due to the necessity of overlapping grid elements. It is quite possible that the grid configuration could be modified to optimize this and bring down computation time; this has not been thoroughly investigated.
+**Timing:** The spatially-varying Zogy implementation takes $\sim 43.0$ seconds, or $\sim 1.5\times$ longer than the non-spatially-varying version. The reasons for this is unclear, except (as mentioned above) with the spatially-varying variant, the Zogy procedure is actually performed on significantly more image area (about 10% more) due to the necessity of overlapping grid elements. It is quite possible that the grid configuration could be modified to optimize this and bring down computation time; this has not been thoroughly investigated.
 
 ## 3.2. imageMapReduce: construction of new PSFs
 
@@ -154,15 +154,15 @@ This will not work for Zogy, however, since the template and science image are e
 
 While I described at various points above the known issues with the current LSST implementations of AL decorrelation and/or Zogy, here is a simple overview/summary of those known issues, including (if they have been made) their related tickets. It should be added that since the Zogy code has only recently been added to the LSST stack and minimally applied to actual data, there could be other issues that are not yet known.
 
-1. Occasional issues with AL decorrelation, which lead to strange fringing/periodic wave-like artifacts. The cause is unknown and the situation is not completely understood; probably related to the shape/structure of the PSF matching kernel. Note that if the term in the denominator of the expression for $\psi(k)$ is too close to zero, it will lead to large values in the kernel, which could lead to strange aliasing artifacts in the resulting decorrelated diffim.
+1. Occasional issues with AL decorrelation, which lead to strange fringing/periodic wave-like artifacts. The cause is unknown and the situation is not completely understood; probably related to the shape/structure of the PSF matching kernel. Note that if the term in the denominator of the expression for $\psi(k)$ is too close to zero, it will lead to large values in the kernel, which could lead to strange aliasing artifacts in the resulting decorrelated diffim. This is a rare occurrence, and I have only seen it recently on poorly-calibrated WISE images. 
 
 2. AL decorrelation when pre-convolution is enabled has similar issues to (1.) above but more frequent. Probably also due to similar causes which are exacerbated by the inclusion of a noisy PSF in the decorrelation kernel term.
 
 3. Zogy suffers if there is inaccurate relative calibration between the two images. This issue can be seen in nearly all of the Zogy images shown in this document.
 
-4. Fringing in Zogy diffim (see [Figure 4b](#figure-4b)). Possibly related to the use of certain PSFex parameters in computing the PSFs for the two input images (as suggested by Tim Axelrod; see above). Another consideration could be related to the interpolation used for template warping; this has not been investigated.
+4. Fringing in Zogy diffim (see [Figure 4b](#figure-4b)). Possibly related to the use of certain PSFex parameters in computing the PSFs for the two input images (as suggested by Tim Axelrod; see above). Another consideration could be related to the interpolation used for template warping; this has not been investigated. The spatial extent of these fringing artifacts is limited by ensuring that PSFs don't decrease below a certain level (thus eliminating very small or negative numbers in the Zogy diffim expression), and/or increasing the size of the `ImageMapReduce` grid elements.
 
-5. Artifacts in the Zogy diffim when convolutions are computed in image (real) space (again, see [Figure 4b](#figure-4b)). Could have the same causes as the fringing in the Fourier-based Zogy diffim.
+5. Artifacts in the Zogy diffim when convolutions are computed in image (real) space (again, see [Figure 4b](#figure-4b)). Could have the same causes as the fringing in the Fourier-based Zogy diffim. Possible additional fixes could include increasing the padding of the PSFs, and/or increasing the size of the `ImageMapReduce` grid elements.
 
 6. The `ImageMapReduce` framework for computing Zogy or AL decorrelation in a spatially-varying manner across an image could benefit from an improved method to compute the grid geometry for any given exposure/PSF dimensions that is less brittle and could probably speed up the operation significantly.
 
@@ -178,18 +178,18 @@ At the end of each subsection above, I listed the run-time timings of each algor
 |-------------|-------------|----|---|--|
 | AL           | -  | No | 31.8     |
 | AL + decorr. | No | No | 42.5 |
-| AL + decorr. | Yes | No | 126.3 |
+| AL + decorr. | Yes | No | 108.0 |
 | Zogy        | No   | No | 26.6 |
-| Zogy        | Yes  | No | 51.7 |
+| Zogy        | Yes  | No | 43.0 |
 | Zogy (im-space) | No | No | 55.4 |
-| Zogy (im-space) | Yes | No | 280.0 |
+| Zogy (im-space) | Yes | No | 246.3 |
 | AL          | - | Yes | 55.8 |
 | AL + decorr. | No | Yes | 67.8 |
-| AL + decorr. | Yes | Yes | 148.4 |
+| AL + decorr. | Yes | Yes | 138.4 |
 | Zogy   | No | Yes | 32.7 |
-| Zogy   | Yes | Yes | 78.7 |
+| Zogy   | Yes | Yes | 62.7 |
 
-## 5.3. Random thoughts and notes gathered during research
+## 5.2.1. Random thoughts and notes for improving algorithm efficiency
 
 1. Currently the Zogy implementation uses `numpy.fft.fft2` and related for computing 2-D FFTs. It should be noted that the `scipy.fftpack` implementation has been found to be slightly faster, while the `fftw` library (with python bindings [pyFFTW](https://pypi.python.org/pypi/pyFFTW) can be significantly faster. Moreover, there is little effort made to pad matrices to $2^n$ dimensions, which if done can also speed up the Fourier transforms. Little effort has been made to investigate this further since at this point it is not clear how much the FFTs bottleneck the procedure.
 
