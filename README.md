@@ -36,7 +36,7 @@ See section (1.2.1) below for details and complications of implementing decorrel
 
 **Timing:** Enabling decorrelation increases the run-time of the AL algorithm on a sample DECam exposure by $\sim 10.5$ seconds, or about 33%.
 
-### 1.2.1. Decorrelation + pre-convolution = trouble
+### 1.2.1. Decorrelation + pre-convolution
 
 The variant of the expression for performing decorrelation in the case of pre-convolution (described above) is given by the deconvolution kernel, $\psi(k)$ as described in [Equation 3 in DMTN-021](https://dmtn-021.lsst.io/#equation-equation-3). The expression includes the pre-filter kernel, $M(k)$ described above.
 
