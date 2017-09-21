@@ -2,7 +2,7 @@
 
 The image subtraction script is in `lsst.pipe.tasks.imageDifference`, which performs image subtraction and then detects and measures sources (`diaSources`) in the subtractions. This task itself very recently was refactored (DM-3704) and split into two separate tasks which now reside in `ip_diffim`: `MakeDiffimTask` and `ProcessDiffimTask`, which are called sequentially from the command-line task `imageDifference.py`.
 
-**Important note:** There exists an un-merged branch `u/djreiss/DM-3704` of `ip_diffim` and `pipe_tasks` which implements tickets [DM-3704](https://jira.lsstcorp.org/browse/DM-3704), [DM-5294](https://jira.lsstcorp.org/browse/DM-5294) and [DM-5295](https://jira.lsstcorp.org/browse/DM-5295), a refactor of the large and sprawling code in the existing command-line task`lsst.pipe.tasks.imageDifference.py`. At the time of this writing, the responsibilities of the existing task were split into two separate command-line tasks (and their corresponding pipe tasks) and moved from `pipe_tasks` into `ip_diffim`. These new tasks are in the submodules `lsst.ip.diffim.makeDiffim` and `lsst.ip.diffim.processDiffim`. Correspondingly, `imageDifference.py` is now primarily a wrapper around these two tasks which call `MakeDiffimTask.run()` and `ProcessDiffimTask.run()` in order, taking the same exact input and producing the same exact output as previously.
+**Important note:** There exists an un-merged branch `tickets/DM-3704` of `ip_diffim` and `pipe_tasks` which implements tickets [DM-3704](https://jira.lsstcorp.org/browse/DM-3704), [DM-5294](https://jira.lsstcorp.org/browse/DM-5294) and [DM-5295](https://jira.lsstcorp.org/browse/DM-5295), a refactor of the large and sprawling code in the existing command-line task`lsst.pipe.tasks.imageDifference.py`. At the time of this writing, the responsibilities of the existing task were split into two separate command-line tasks (and their corresponding pipe tasks) and moved from `pipe_tasks` into `ip_diffim`. These new tasks are in the submodules `lsst.ip.diffim.makeDiffim` and `lsst.ip.diffim.processDiffim`. Correspondingly, `imageDifference.py` is now primarily a wrapper around these two tasks which call `MakeDiffimTask.run()` and `ProcessDiffimTask.run()` in order, taking the same exact input and producing the same exact output as previously.
 
 The remaining text below will assume that this refactor eventually gets merged into master, and thus will refer to `makeDiffim`, `processDiffim`, etc.
 
@@ -10,7 +10,7 @@ The remaining text below will assume that this refactor eventually gets merged i
 
 The AL algorithm is used by default in `ip_diffim` to perform PSF matching and image subtraction. It performs quickly and well because it uses small regions surrounding bright, isolated stars around to compute the PSF-matching kernel, $k_i$, at various locations $i$ across the image. It uses various heuristics to pre-filter those bright stars prior to computation of the $k_i$, and once they are computed, uses PCA to estimate a smoothly spatially-varying $k$ from them.
 
-There are a very large number of configuration parameters which affect the quality of the subtraction. In general, the defaults work well, although for images with different pixel-scales and/or PSF sizes, these parameters may need to be tuned. Many of these important parameters are buried deep in the `kernel` config parameter of the `subtract` algorithm (a reference to the `lsst.ip.diffim.ImagePsfMatchTask` task).
+There are a very large number of configuration parameters which affect the quality of the subtraction. In general, the defaults work well, although for images with different pixel-scales and/or PSF sizes, these parameters may need to be tuned. Many of these important parameters are buried deep in the `kernel` config parameter of the `lsst.ip.diffim.ImagePsfMatchTask` task (which is the `subtract` subtask of `MakeDiffimTask`).
 
 In [Figure 1](#figure-1) and [Figure 2](#figure-2), we show an image subtraction using the AL algorithm on an example DECam image. Here we use a single `calexp` as the template to highlight the effects of noise in the template and how these are mitigated. Note that the subtraction is decorrelated (see Section 1.2.), as this is now the default when image subtraction is run via the LSST stack.
 
@@ -30,7 +30,7 @@ When the template exposure has significant noise (i.e., is not constructed from 
 
 ![Subsections of a DECam image subtraction, including warped and PSF-matched template, science image, and both decorrelated and non-decorrelated AL difference images.](_static/fig02.png "figure-2")
 
-There occasionally is a problem with decorrelation that I have not been able to narrow down, other than that I believe it is related to the shape/structure of the PSF matching kernel. Note that if the term in the denominator of the expression for $\psi(k)$ is too close to zero, it will lead to large values in the kernel, which could lead to strange aliasing artifacts in the resulting decorrelated diffim.
+There occasionally is a problem with decorrelation that I have not been able to narrow down. This problem manifests as noise with a periodic pattern, apparently an overestimated noise problem with some aliasing. This issue is rather rare and I have seen it particularly on notably noisy or poorly reduced images. I believe it is related to the shape/structure of the PSF matching kernel. If the term in the denominator of the expression for $\psi(k)$ is too close to zero, it will lead to large values in the kernel, which could lead to strange aliasing artifacts in the resulting decorrelated diffim.
 
 See section (1.2.1) below for details and complications of implementing decorrelation in the case of pre-convolution (section 1.1), and see section (3) below for details about how the decorrelation is performed, when accounting for spatially-varying PSFs and noise.
 
@@ -52,15 +52,19 @@ It should also be noted that currently the spatially-varying decorrelation (desc
 
 The Zogy algorithm is implemented in the LSST stack, and is enabled by setting the config `makeDiffim.subtract='zogy'`. The main guts of the algorithm and its task are in the `lsst.ip.diffim.zogy` submodule. It is functional. It is implemented in pure python; although much of the expensive calculations are performed under-the-hood in `C` or `Fortran` via `scipy` or `afw`, be they FFTs or convolutions.
 
-We show an example Zogy diffim below in [Figure 4a](#figure-4a). The standard Zogy implementation, in which all convolutions are performed in frequency space, is on the bottom-left. It shows clear signs of aliasing and fringing-related artifacts around bright stars. It also shows (with the negative artifacts near fainter stars) the effect of the apparent inaccurate relative flux calibration between the template and science images. (Note that no attempt to improve the relative calibration is performed in the Zogy code -- it is expected to be accurately performed during initial exposure calibration. This reveals a weakness of Zogy relative to AL -- the requirement of accurate [relative] calibration between the two images.) This may be seen more readily in an other subimage from the same DECam image ([Figure 4b](#figure-4b)).
+We show an example Zogy diffim below in [Figure 4](#figure-4). The standard Zogy implementation, in which all convolutions are performed in frequency space, is on the bottom-left. It shows clear signs of aliasing and fringing-related artifacts around bright stars. It also shows (with the negative artifacts near fainter stars) the effect of the apparent inaccurate relative flux calibration between the template and science images. (Note that **no attempt to improve the relative calibration is performed in the Zogy code -- it is expected to be accurately performed during initial exposure calibration**. This reveals a weakness of Zogy relative to AL -- the requirement of accurate [relative] calibration between the two images; while AL can incorporate any mis-calibration in the matching kernel).
 
-![Subsections of a DECam Zogy image subtraction, including warped and PSF-matched template, science image, and the results of the "standard" and image-space versions of the Zogy algorithm.](_static/fig04a.png "figure-4a")
+This may be seen more readily in an other subimage from the same DECam image ([Figure 5](#figure-5)). I should note that while these negative residuals are evident for this example pair of exposures, it is actually not frequently seen in real images; it might simply be a case where these two images were not (for some reason) accurately flux-calibrated. Again, we assume that relative flux calibration will be accurately performed by the LSST calibration step, and this will not be an issue. Alternatively, it should not be difficult to fit the relative flux normalization terms, and incorporate them into the Zogy expression (they are already included in the code as $F_r$ and $F_n$ and set by default to 1) or re-scale one of the images prior to subtraction.
 
-![Subsections of the same DECam Zogy image subtraction as in Figure 4a.](_static/fig04b.png "figure-4b")
+![Subsections of a DECam Zogy image subtraction, including warped and PSF-matched template, science image, and the results of the "standard" and image-space versions of the Zogy algorithm.](_static/fig04a.png "figure-4")
 
-I should note that this fringing was observed by Tim Axelrod in [another Zogy implementation](https://github.com/pmvreeswijk/ZOGY) when a certain PSFex PSF configuration was used (pixel based? too small PSF dimensions? "It certainly is a result of bad parameters to psfex, and in particular the footprint size for determining the psf being way too big for this data."). I include his example below in [Figure 5](#figure-5), based upon DECam data. It appears to be an $S_{corr}$ image (see Section 2.3, below). He was able to fix the fringing by changing the PSFEx parameters, but is unclear on the details.
+![Subsections of the same DECam Zogy image subtraction as in Figure 4a.](_static/fig04b.png "figure-5")
 
-![Example Zogy image with fringing from Tim Axelrod](_static/fig05.png "figure-5")
+**Some additional notes about the fringing:**
+
+1. This fringing was observed by Tim Axelrod in [another Zogy implementation](https://github.com/pmvreeswijk/ZOGY) when a certain PSFex PSF configuration was used (pixel based? too small PSF dimensions? "It certainly is a result of bad parameters to psfex, and in particular the footprint size for determining the psf being way too big for this data."). I include his example below in [Figure 6](#figure-6), based upon DECam data. It appears to be an $S_{corr}$ image (see Section 2.3, below). He was able to fix the fringing by changing the PSFEx parameters, but is unclear on the details.
+![Example Zogy image with fringing from Tim Axelrod](_static/fig05.png "figure-6")
+2. The point in (1.) above, that the fringing might be a PSFex PSF-related artifact is consistent with the fact that I only see this fringing in real data where the PSFs have been measured (in the LSST stack, as I mentioned, the default is to use PSFex). When I originally ran the Zogy code on simulated images with smooth, double-Gaussian elliptical PSFs, I did not see such fringing. An example notebook where this is evident may be found [here](https://github.com/djreiss/diffimTests/blob/master/notebooks/28.%20algorithm%20shootout%20-%20updated-dense.ipynb).
 
 **Timing:** The current implementation of Zogy takes roughly 26.6 seconds, or $0.63\times$ as long (i.e., is $\sim37\%$ faster) to run than the AL algorithm with decorrelation enabled. There has been limited attempt to date to optimize the Zogy algorithm, and some simple profiling is likely to highlight several bottlenecks.
 
@@ -76,9 +80,9 @@ Efforts were made to ensure that masks and variance planes are correctly handled
 
 ## 2.3. The ZOGY $S_{corr}$ image
 
-The Zogy manuscript describes the derivation of the "likelihood" image, which they call $S_{corr}$, because it may be *corrected* for various terms such as astrometric errors/scintillation. This image is analogous to the pre-convolved, decorrelated AL diffim in that it is already pre-match-filtered with its own PSF, and thus may simply be thresholded for detection. The Zogy code in `ip_diffim` has the option of computing this image. Because of its similarity to the pre-convolution option in AL, it is enabled in the `imageDifference.py` command-line script by setting the config option `makeDiffim.doPreConvolve` to `True`. We show an example $S_{corr}$ image in the bottom-right of [Figure 6](#figure-6), which may be compared with the AL version (non-decorrelated) on the bottom-left of [Figure 6](#figure-6) and both decorrelated and non-decorrelated versions of AL at the bottom of [Figure 3](#figure-3). The $S_{corr}$ image again shows (what I believe to be) the effect of inaccurate relative calibration between the two input images.
+The Zogy manuscript describes the derivation of the "likelihood" image, which they call $S_{corr}$, because it may be *corrected* for various terms such as astrometric errors/scintillation. This image is analogous to the pre-convolved, decorrelated AL diffim in that it is already pre-match-filtered with its own PSF, and thus may simply be thresholded for detection. The Zogy code in `ip_diffim` has the option of computing this image. Because of its similarity to the pre-convolution option in AL, it is enabled in the `imageDifference.py` command-line script by setting the config option `makeDiffim.doPreConvolve` to `True`. We show an example $S_{corr}$ image in the bottom-right of [Figure 7](#figure-7), which may be compared with the AL version (non-decorrelated) on the bottom-left of [Figure 7](#figure-7) and both decorrelated and non-decorrelated versions of AL at the bottom of [Figure 3](#figure-3). The $S_{corr}$ image again shows (what I believe to be) the effect of inaccurate relative calibration between the two input images.
 
-![Subsections of a DECam Zogy image subtraction, including warped and PSF-matched template, science image, and the results of pre-convolved AL subtraction, and the Zogy $S_{corr}$ likelihood image.](_static/fig06.png "figure-6")
+![Subsections of a DECam Zogy image subtraction, including warped and PSF-matched template, science image, and the results of pre-convolved AL subtraction, and the Zogy $S_{corr}$ likelihood image.](_static/fig06.png "figure-7")
 
 **Timing:** The computation of the Zogy $S_{corr}$ image is roughly 10 to 20% slower than computing the standard Zogy diffim, depending upon whether the spatially varying options are enabled or not.
 
@@ -90,13 +94,13 @@ The calculations underlying both AL decorrelation and Zogy depend upon factors w
 
 ## 3.1. imageMapReduce: Implementation details
 
-The `imageMapReduce` framework may be visualized via the following schematic ([Figure 7](#figure-7)). The `ImageMapReduceTask` chops up the input `Exposure` into subExposures, which are then processed by the `ImageMapper`. The modified subExposures are stitched back together by the `ImageReducer` into a new `Exposure`.
+The `imageMapReduce` framework may be visualized via the following schematic ([Figure 8](#figure-8)). The `ImageMapReduceTask` chops up the input `Exposure` into subExposures, which are then processed by the `ImageMapper`. The modified subExposures are stitched back together by the `ImageReducer` into a new `Exposure`.
 
-![Schematic of the `imageMapReduce` framework for performing spatially-varying calculations on one or more exposures. The inset shows an example grid. Only every fifth grid element is drawn, for clarity.](_static/fig07.png "figure-7")
+![Schematic of the `imageMapReduce` framework for performing spatially-varying calculations on one or more exposures. The inset shows an example grid. Only every fifth grid element is drawn, for clarity.](_static/fig07.png "figure-8")
 
 The `ImageMapReduceTask` accepts a set of configuration parameters that specify how the grid is constructed (grid element size and spacings). The grid specification is flexible so that it may containg arbitrary overlapping regions between grid elements, and be of arbitrary dimensions. The dimensions may also be specified in units of the FWHM of the PSF of the input `Exposure`. An important detail is that one may also specify an "expanded border" region for each grid element. If this is done, then two subExposures are passed to the `mapper` subtask (see below). An example grid is shown in the inset of [Figure 7](#figure-7), including the "expanded" sub-regions in the dotted lines.
 
-The `ImageMapReduceTask` also accepts configuration parameters that specify the `mapper` and `reducer` subtasks. The `ImageMapReduceTask` then chops up the input `Exposure` and passes those subExposures independently to the `run` method of its `mapper` subtask. The `mapper` subtask is a subclass of `ImageMapper`, and its `run` method performs the calculations on the subExposure, returning a modified subExposure (optionally with a modified PSF), along with other metadata. (It may optionally return something other than an exposure, e.g. a float, which can be useful for, for example, computing statistics or doing other measurements on a grid across the input Exposure.) If the "expanded border" is specified (as is needed by both AL decorrelation and Zogy) then two subExposures are passed to the `mapper`'s `run` method. The calculations are to be computed on the expanded subExposure, and then the sub-image of the expanded subExposure corresponding to the original grid element size is returned. This allows operations such as convolutions or FFTs to be performed on the larger image and the resulting invalid pixels at the borders are cut away before passing the valid subExposure back to the `reducer` (see the inset of [Figure 7](#figure-7)).
+The `ImageMapReduceTask` also accepts configuration parameters that specify the `mapper` and `reducer` subtasks. The `ImageMapReduceTask` then chops up the input `Exposure` and passes those subExposures independently to the `run` method of its `mapper` subtask. The `mapper` subtask is a subclass of `ImageMapper`, and its `run` method performs the calculations on the subExposure, returning a modified subExposure (optionally with a modified PSF), along with other metadata. (It may optionally return something other than an exposure, e.g. a float, which can be useful for, for example, computing statistics or doing other measurements on a grid across the input Exposure.) If the "expanded border" is specified (as is needed by both AL decorrelation and Zogy) then two subExposures are passed to the `mapper`'s `run` method. The calculations are to be computed on the expanded subExposure, and then the sub-image of the expanded subExposure corresponding to the original grid element size is returned. This allows operations such as convolutions or FFTs to be performed on the larger image and the resulting invalid pixels at the borders are cut away before passing the valid subExposure back to the `reducer` (see the inset of [Figure 8](#figure-8)).
 
 The returned, modified subExposures are then stitched together by the `reducer` subtask into a final output `Exposure`, averaging the overlapping regions (by default).
 
@@ -217,15 +221,11 @@ imageDifference.py calexpDir_b1631 --output decamDirTest_AL \
           --id visit=289820 ccdnum=11 --templateId visit=288976 \
           --configfile diffimConfig.py --config makeDiffim.doDecorrelation=False >& \
           	output_AL.txt
-```
 
-```
 imageDifference.py calexpDir_b1631 --output decamDirTest_ALDec_noSpatial \
           --id visit=289820 ccdnum=11 --templateId visit=288976 \
           --configfile diffimConfig.py >& output_ALDec_noSpatial.txt
-```
 
-```
 imageDifference.py calexpDir_b1631 --output decamDirTest_ALDec_yesSpatial \
           --id visit=289820 ccdnum=11 --templateId visit=288976 \
           --configfile diffimConfig.py --config makeDiffim.doSpatiallyVarying=True >& \ 				output_ALDec_yesSpatial.txt
@@ -238,24 +238,18 @@ imageDifference.py calexpDir_b1631 --output decamDirTest_Zogy_noSpatial \
           --id visit=289820 ccdnum=11 --templateId visit=288976 \
           --configfile diffimConfig.py --config makeDiffim.subtract='zogy' >& \ 
 				output_Zogy_noSpatial.txt
-```
 
-```
 imageDifference.py calexpDir_b1631 --output decamDirTest_Zogy_yesSpatial \
           --id visit=289820 ccdnum=11 --templateId visit=288976 \
           --configfile diffimConfig.py --config makeDiffim.subtract='zogy' \
           --config makeDiffim.doSpatiallyVarying=True >& output_Zogy_yesSpatial.txt
-```
 
-```
 # replace 'inImageSpace=False' with 'inImageSpace=True' in diffimconfig.py
 imageDifference.py calexpDir_b1631 --output decamDirTest_ZogyImSpace_noSpatial \
 			--id visit=289820 ccdnum=11 --templateId visit=288976 \
 			--configfile diffimConfig.py --config makeDiffim.subtract='zogy' \
 				>& output_ZogyImSpace_noSpatial.txt
-```
 
-```
 # replace 'inImageSpace=False' with 'inImageSpace=True' in diffimconfig.py
 imageDifference.py calexpDir_b1631 --output decamDirTest_ZogyImSpace_yesSpatial \
 			--id visit=289820 ccdnum=11 --templateId visit=288976 \
