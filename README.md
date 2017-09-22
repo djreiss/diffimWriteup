@@ -155,6 +155,29 @@ and then use the combination of $T'$, $S$, and $D'$ for dipole fitting. Another 
 
 This will not work for Zogy, however, since the template and science image are each convolved with a non-PSF-like kernel, which leads to them individually looking quite odd -- but that oddness "cancels" when the images are finally subtracted in the end. In principle, we could simply feed the original science and warped (non-psf-matched) template to the dipole fitting code, as all they are really used for are to constrain the dipole lobe centroids. However, that will involve some modification of the dipole fitting code so that it can use three different PSFs -- the template PSF for one lobe, the science image PSF for the other lobe, and the diffim PSF for the joint dipole fit. This would not be dificult; it has simply not been done.
 
+# 5. Photometry
+
+In [DM-8796](https://jira.lsstcorp.org/browse/DM-8796) I reviewed the photometry of diaSources recovered in simulated images using the various algorithms described above. Several issues were discovered. Note that all of these issues were discovered on *simulated* images and thus are not related to the issues discussed above associated with PSFex-measured PSFs. I will not rehash the details of those here, but will instead simply paste a slightly-edited copy of the summary here:
+
+SNRs and forced photometry were assessed for all 4 flavors of diffim tested (Flavors: A&L, A&L(decorrelated), ZOGY(fully Fourier space), ZOGY(convolutions in image space). The forced photometry SNRs on diffims for all 4 flavors matched the expectation for the input PSFs and fluxes. These tests led to discovery of issues (bugs) with both ZOGY and A&L diffim decorrelation. The issues found and corrected included 1-pixel offsets in convolution kernels (and resulting PSFs). There are still three known issues with ZOGY and/or AL(decorr) that have yet to be solved, but these will be addressed in four tickets as determined to be necessary. These four issues and their corresponding new tickets are:
+
+1. DM-9442: ZOGY seems to have better performance than A&L(decorr) (better true-positive rate, similar rate of false positives). Part of this may be the windowing issue (losing detections in convolution window around image edge) but I tried to prevent any transients from being placed near edges and still seeing this effect a bit (~10% difference).
+
+– Tested - could be misalignment of PSF. TRY: re-run with bigger matching radius (this is not the problem)
+– Tested - could be issue with ALdecorr PSF. TRY: compare ALdecorr PSF with ZOGY psf (PSFs are slightly different)
+– Tested - different PSFs are related to imperfect PSF matching. Tried other parameters for basis (e.g. make them somewhat smaller) which improved the AL result slightly.
+
+2. DM-9443: ZOGY(image space) has issues (artifacts) but only with measured PSFs, leading to fewer detections, more false positives. This is in comparison to ZOGY performed fully in Fourier space.
+
+– This seems to be related to padding of the kernels. I fixed the padding (removed the "unpadding" step) and things improved a lot. Doing that and increasing the padSize removes much of the artifacts but increases the width of the invalid convolution "window" around the edges of the image.
+– TODO: investigate tradeoff between padding of PSF for ZOGY (image-space) vs. artifacts on real data.
+
+3. DM-9444: ZOGY (both kinds) has poorer performance when template is not noisy but only with measured PSFs, leading to fewer detections, more false positives
+
+– TESTED - try with re-measuring science img PSF but not template PSF (no improvement)
+
+4. DM-9445: ZOGY S_corr is underperforming. This appears to be a regression. Likely due to the fact that I changed how the variance is computed for the Fourier-only-based ZOGY. But it could also just be a detection issue (detection for all other methods was changed to use pixel_stdev and positive only, but not changed for SZOGY).
+
 # 5. Appendix
 
 ## 5.1. Summary of known issues with AL decorrelation and Zogy
@@ -165,11 +188,11 @@ While I described at various points above the known issues with the current LSST
 
 2. AL decorrelation when pre-convolution is enabled has similar issues to (1.) above but more frequent. Probably also due to similar causes which are exacerbated by the inclusion of a noisy PSF in the decorrelation kernel term.
 
-3. Zogy suffers if there is inaccurate relative calibration between the two images. This issue can be seen in nearly all of the Zogy images shown in this document.
+3. Zogy suffers if there is inaccurate relative calibration between the two images. This issue can be seen in nearly all of the Zogy images shown in this document. Not clear how frequently this occurs.
 
 4. Fringing in Zogy diffim (see [Figure 4b](#figure-4b)). Possibly related to the use of certain PSFex parameters in computing the PSFs for the two input images (as suggested by Tim Axelrod; see above). Another consideration could be related to the interpolation used for template warping; this has not been investigated. The spatial extent of these fringing artifacts is limited by ensuring that PSFs don't decrease below a certain level (thus eliminating very small or negative numbers in the Zogy diffim expression), and/or increasing the size of the `ImageMapReduce` grid elements.
 
-5. Artifacts in the Zogy diffim when convolutions are computed in image (real) space (again, see [Figure 4b](#figure-4b)). Could have the same causes as the fringing in the Fourier-based Zogy diffim. Possible additional fixes could include increasing the padding of the PSFs, and/or increasing the size of the `ImageMapReduce` grid elements.
+5. DM-9443: Artifacts in the Zogy diffim when convolutions are computed in image (real) space (again, see [Figure 4b](#figure-4b)). Could have the same causes as the fringing in the Fourier-based Zogy diffim. Possible additional fixes could include increasing the padding of the PSFs, and/or increasing the size of the `ImageMapReduce` grid elements.
 
 6. The `ImageMapReduce` framework for computing Zogy or AL decorrelation in a spatially-varying manner across an image could benefit from an improved method to compute the grid geometry for any given exposure/PSF dimensions that is less brittle and could probably speed up the operation significantly.
 
@@ -204,7 +227,7 @@ At the end of each subsection above, I listed the run-time timings of each algor
 
 ## 5.4. Commands for running image subtraction in various modes
 
-Example output from the various runs of the image subtraction pipeline on a single pair of DECam exposures is shown in the [notebook](_data/figures-and-debugging.ipynb) attached to this DMTN's repository. Scripts were used to perform these runs, and they have been saved in the [DM-3704 branch of ip_diffim](https://github.com/lsst/ip_diffim/tree/u/djreiss/DM-3704) and of [pipe_tasks](https://github.com/lsst/pipe_tasks/tree/u/djreiss/DM-3704). I now summarize these command-line configurations below. I also include the redirected output text files in this repo as well.
+Example output from the various runs of the image subtraction pipeline on a single pair of DECam exposures is shown in the [notebook](_data/figures-and-debugging.ipynb) attached to this DMTN's repository. Scripts were used to perform these runs, and they have been saved in the [DM-3704 branch of ip_diffim](https://github.com/lsst/ip_diffim/tree/u/djreiss/DM-3704) and of [pipe_tasks](https://github.com/lsst/pipe_tasks/tree/u/djreiss/DM-3704). The data itself have been uploaded to the [dmtn-061-data](https://github.com/lsst-dm/dmtn-061-data) repository. I now summarize these command-line configurations below. I also include the redirected output text files in this repo as well.
 
 1. Configuration file `diffimConfig.py` for `imageDifference.py`:
 ```
